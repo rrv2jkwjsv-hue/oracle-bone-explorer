@@ -767,8 +767,11 @@ html, body { width: 100%; height: 100%; height: 100dvh; overflow: hidden; font-f
   }
 }
 
-/* 横屏短高度：避免拖动碎片溢出屏幕 */
-@media (max-height: 480px) and (orientation: landscape) {
+/* 横屏短高度：避免拖动碎片溢出屏幕。
+   既覆盖真实横屏手机（max-height landscape），
+   也覆盖被 #app 旋转 90° 后变成"短高度"的竖屏手机（max-width portrait）。 */
+@media (max-height: 480px) and (orientation: landscape),
+       (max-width: 480px) and (orientation: portrait) {
   #dialog { bottom: 4%; padding: 10px 18px; font-size: 14px; }
   #completed-chars, #assembled-chars-top { top: 4%; gap: 12px; }
   .completed-slot, .assembled-slot { width: 40px; height: 40px; }
@@ -781,6 +784,24 @@ html, body { width: 100%; height: 100%; height: 100dvh; overflow: hidden; font-f
   #assemble-hint { top: 18%; font-size: 13px; padding: 6px 14px; }
   #evo-video-frame { width: 70%; aspect-ratio: 16 / 9; }
 }
+
+/* 手机竖屏：把整个 #app 旋转 90° 强制横屏 */
+/* 触发条件：宽<=768 且竖屏（高>宽）；iPad 横向不会进 */
+@media (max-width: 768px) and (orientation: portrait) {
+  body { overflow: hidden; }
+  #app {
+    width: 100vh;
+    height: 100vw;
+    /* 兼容动态视口（地址栏伸缩） */
+    width: 100dvh;
+    height: 100dvw;
+    transform-origin: top left;
+    transform: rotate(90deg) translate(0, -100%);
+    position: absolute;
+    top: 0; left: 0;
+  }
+}
+
 
 </style>
 </head>
@@ -911,6 +932,13 @@ const combineRules = { '人': '休', '爪': '采', '木2': '林' };
 // 状态
 let completedChars = [];
 let currentPhase = 'intro';
+
+// 是否处于"竖屏手机被强制旋转 90°"模式
+function isAppRotated() {
+  const app = document.getElementById('app');
+  if (!app) return false;
+  return getComputedStyle(app).transform !== 'none';
+}
 
 // 创建SVG元素
 function createSVG(pathData, color = '#c0a060') {
@@ -1094,13 +1122,18 @@ function initPanoDrag(viewport, scene, sceneW) {
     setTimeout(() => viewport.dataset.dragged = '0', 50);
   };
 
-  viewport.addEventListener('mousedown', e => start(e.clientX));
-  window.addEventListener('mousemove',   e => move(e.clientX));
+  // 旋转模式下，用户视角的"水平拖" = 手指在屏幕上的"垂直滑动"，所以读 clientY
+  const axis = (e, touch) => isAppRotated()
+    ? (touch ? e.touches[0].clientY : e.clientY)
+    : (touch ? e.touches[0].clientX : e.clientX);
+
+  viewport.addEventListener('mousedown', e => start(axis(e, false)));
+  window.addEventListener('mousemove',   e => move(axis(e, false)));
   window.addEventListener('mouseup',     end);
-  viewport.addEventListener('touchstart', e => start(e.touches[0].clientX), {passive: true});
+  viewport.addEventListener('touchstart', e => start(axis(e, true)), {passive: true});
   viewport.addEventListener('touchmove',  e => {
     if (dragging) e.preventDefault();
-    move(e.touches[0].clientX);
+    move(axis(e, true));
   }, {passive: false});
   viewport.addEventListener('touchend',   end);
 }
@@ -1121,10 +1154,12 @@ function onShardClick(el) {
 
   // 创建放大展示效果
   const clone = el.cloneNode(true);
+  const rotated = isAppRotated();
+  const baseTransform = rotated ? 'rotate(90deg) ' : '';
   clone.style.position = 'fixed';
   clone.style.left = '50%';
   clone.style.top = '50%';
-  clone.style.transform = 'translate(-50%, -50%) scale(0.8)';
+  clone.style.transform = baseTransform + 'translate(-50%, -50%) scale(0.8)';
   clone.style.zIndex = '100';
   clone.style.animation = 'none';
   clone.style.filter = 'drop-shadow(0 0 30px rgba(255,170,0,1))';
@@ -1137,7 +1172,7 @@ function onShardClick(el) {
 
   // 放大展示
   setTimeout(() => {
-    clone.style.transform = 'translate(-50%, -50%) scale(2.5)';
+    clone.style.transform = baseTransform + 'translate(-50%, -50%) scale(2.5)';
   }, 50);
 
   // 更新计数
@@ -1209,8 +1244,18 @@ function initAssembleDrag() {
     offsetX = clientX - rect.left;
     offsetY = clientY - rect.top;
     dragEl.classList.add('dragging');
+    // 旋转模式下：从 #app(rotate) 里取出来挂 body，避免父级 transform 影响 fixed 坐标系
+    if (isAppRotated()) {
+      dragEl._origParent = piece.parentNode;
+      dragEl._origNext = piece.nextSibling;
+      document.body.appendChild(dragEl);
+      dragEl._rotated = true;
+    } else {
+      dragEl._rotated = false;
+    }
     dragEl.style.position = 'fixed';
-    dragEl.style.transform = 'none';
+    // 旋转模式下视觉上要保持横屏方向 → 给元素自身 rotate(90deg)
+    dragEl.style.transform = dragEl._rotated ? 'rotate(90deg)' : 'none';
     dragEl.style.left = rect.left + 'px';
     dragEl.style.top = rect.top + 'px';
     dragEl.style.right = 'auto';
@@ -1246,6 +1291,13 @@ function initAssembleDrag() {
       dragEl.classList.add('matched');
       onPieceMatched(resultChar);
     } else {
+      // 归位：如果旋转模式下被挂到 body，先插回原父
+      if (dragEl._rotated && dragEl._origParent) {
+        dragEl._origParent.insertBefore(dragEl, dragEl._origNext || null);
+        dragEl._origParent = null;
+        dragEl._origNext = null;
+      }
+      dragEl._rotated = false;
       dragEl.style.position = '';
       dragEl.style.left = '';
       dragEl.style.top = '';
@@ -1366,6 +1418,8 @@ function initQuizDrag() {
     document.body.appendChild(dragEl);
     card.classList.add('dragging');
     card.style.position = 'fixed';
+    // 旋转模式下，挂到 body 后失去 #app 的 rotate，需补回来
+    card.style.transform = isAppRotated() ? 'rotate(90deg)' : '';
     card.style.left = rect.left + 'px';
     card.style.top = rect.top + 'px';
     card.style.margin = '0';
@@ -1425,6 +1479,7 @@ function initQuizDrag() {
     dragEl.style.left = '';
     dragEl.style.top = '';
     dragEl.style.margin = '';
+    dragEl.style.transform = '';
     dragEl.style.zIndex = '';
     dragEl = null;
   }
