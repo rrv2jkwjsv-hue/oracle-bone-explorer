@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>甲骨文探索 - 失踪的部落记事</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'SimSun', serif; }
+
+#app {
+  width: 100%; height: 100%;
+  background: #1a1008;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 山洞背景 */
+.cave-bg {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 80%, #3d2b1a 0%, #1a1008 70%);
+}
+
+/* 背景视频 */
+#bg-video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  cursor: pointer;
+}
+
+#bg-video.playing {
+  cursor: default;
+}
+
+/* 初始隐藏场景元素 */
+.scene-elements {
+  display: none;
+}
+
+/* 火把光影 */
+.torch-glow {
+  position: absolute;
+  width: 300px; height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,150,50,0.15) 0%, transparent 70%);
+  animation: flicker 3s ease-in-out infinite alternate;
+}
+.torch-glow.left { top: 10%; left: 5%; }
+.torch-glow.right { top: 10%; right: 5%; }
+
+@keyframes flicker {
+  0% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0.8; transform: scale(0.98); }
+}
+
+/* 火把本体 */
+.torch {
+  position: absolute; top: 8%; width: 20px;
+}
+.torch.left-torch { left: 8%; }
+.torch.right-torch { right: 8%; }
+.torch-body { width: 8px; height: 60px; background: #5c3a1e; margin: 0 auto; border-radius: 2px; }
+.torch-flame {
+  width: 20px; height: 30px; margin: 0 auto;
+  background: radial-gradient(ellipse at 50% 80%, #ff6600, #ffaa00, transparent);
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  animation: flame 0.5s ease-in-out infinite alternate;
+}
+@keyframes flame {
+  0% { transform: scaleX(1) scaleY(1); }
+  100% { transform: scaleX(0.85) scaleY(1.1); }
+}
+
+/* 岩壁纹理 */
+.rock-texture {
+  position: absolute; inset: 0;
+  background-image:
+    radial-gradient(ellipse at 20% 30%, rgba(80,60,40,0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 20%, rgba(60,45,30,0.2) 0%, transparent 40%),
+    radial-gradient(ellipse at 40% 70%, rgba(90,65,40,0.2) 0%, transparent 45%);
+  pointer-events: none;
+}
+
+/* 族长对话框 */
+#dialog {
+  position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
+  background: rgba(60,40,20,0.92);
+  border: 2px solid #8b6914;
+  border-radius: 12px;
+  padding: 16px 28px;
+  color: #f0e6d0;
+  font-size: 18px;
+  max-width: 600px;
+  text-align: center;
+  line-height: 1.6;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s;
+  z-index: 100;
+}
+#dialog.show { opacity: 1; pointer-events: auto; }
+#dialog.top {
+  top: 8%;
+  bottom: auto;
+}
+#dialog .speaker { color: #ffaa00; font-weight: bold; margin-bottom: 4px; }
+
+/* 开始按钮 */
+#start-btn {
+  display: inline-block; margin-top: 12px;
+  padding: 8px 24px;
+  background: #8b6914; color: #fff;
+  border: none; border-radius: 6px;
+  font-size: 16px; cursor: pointer;
+  transition: background 0.2s;
+}
+#start-btn:hover { background: #a67c1a; }
+
+/* 探索阶段 */
+#explore-stage { position: absolute; inset: 0; display: none; overflow: hidden; }
+
+/* 全景视口（裁剪窗口） */
+#pano-viewport {
+  position: absolute; inset: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+#pano-viewport.grabbing { cursor: grabbing; }
+
+/* 宽幅可拖动洞穴场景：尺寸由 JS 按视口动态计算，确保宽度大于视口 */
+#cave-scene {
+  position: absolute; left: 0;
+  background: #1a1008 url('panorama.png') center/100% 100% no-repeat;
+  will-change: transform;
+}
+
+/* 散落碎片符号 */
+.shard {
+  position: absolute;
+  width: 60px; height: 60px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: pointer;
+  user-select: none;
+  pointer-events: auto;
+  animation: shard-pulse 1.4s ease-in-out infinite;
+  transition: transform 0.3s, opacity 0.4s;
+  z-index: 30;
+  filter: drop-shadow(0 0 8px rgba(255,170,0,0.6));
+}
+.shard[data-piece="人"] { background-image: url('shard_person.png'); }
+.shard[data-piece="爪"] { background-image: url('shard_claw.png'); }
+.shard[data-piece="木A"], .shard[data-piece="木B"] { background-image: url('shard_wood.png'); }
+.shard:hover { transform: scale(1.25); filter: drop-shadow(0 0 15px rgba(255,170,0,0.9)); }
+.shard.collected {
+  pointer-events: none;
+  transform: scale(1.8) translateY(-30px);
+  opacity: 0;
+}
+
+@keyframes shard-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50%      { transform: scale(1.12); filter: brightness(1.4); }
+}
+
+/* 碎片进度计数器 */
+#shard-counter {
+  position: absolute; top: 5%; right: 5%;
+  background: rgba(60,40,20,0.85);
+  border: 2px solid #8b6914;
+  border-radius: 10px;
+  padding: 10px 18px;
+  color: #ffdd88;
+  font-size: 18px;
+  z-index: 50;
+}
+#shard-counter .count { color: #ffaa00; font-weight: bold; font-size: 22px; }
+
+/* Toast 提示 */
+#toast {
+  position: absolute; top: 18%; left: 50%; transform: translateX(-50%) translateY(-20px);
+  background: rgba(60,40,20,0.95);
+  border: 2px solid #ffaa00;
+  border-radius: 8px;
+  padding: 12px 24px;
+  color: #ffdd88;
+  font-size: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s, transform 0.4s;
+  z-index: 200;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* 边缘拖动提示箭头 */
+.pano-hint {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  font-size: 56px; color: rgba(255,221,136,0.85);
+  text-shadow: 0 0 12px rgba(255,170,0,0.9);
+  animation: hint-bounce 1.2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 25;
+}
+.pano-hint.left  { left: 20px;  animation-name: hint-bounce-l; }
+.pano-hint.right { right: 20px; animation-name: hint-bounce-r; }
+@keyframes hint-bounce-l {
+  0%, 100% { transform: translateY(-50%) translateX(0);    opacity: 0.5; }
+  50%      { transform: translateY(-50%) translateX(-12px); opacity: 1;   }
+}
+@keyframes hint-bounce-r {
+  0%, 100% { transform: translateY(-50%) translateX(0);   opacity: 0.5; }
+  50%      { transform: translateY(-50%) translateX(12px); opacity: 1;   }
+}
+
+/* 中央拖动文字提示（首次拖动后消失） */
+#drag-hint-text {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(60,40,20,0.85);
+  border: 2px solid #ffaa00;
+  border-radius: 30px;
+  padding: 12px 32px;
+  color: #ffdd88;
+  font-size: 22px;
+  pointer-events: none;
+  z-index: 26;
+  animation: hint-fade 2.5s ease-in-out infinite;
+  transition: opacity 0.6s;
+}
+#drag-hint-text.hidden { opacity: 0; animation: none; }
+@keyframes hint-fade {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1;   }
+}
+
+/* 已完成的字展示区 */
+#completed-chars {
+  position: absolute; top: 5%; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 30px;
+}
+.completed-slot {
+  width: 70px; height: 70px;
+  border: 2px solid rgba(139,105,20,0.3);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(30,20,10,0.5);
+  transition: all 0.5s;
+}
+.completed-slot.filled {
+  border-color: #ffaa00;
+  background: rgba(139,105,20,0.2);
+  box-shadow: 0 0 10px rgba(255,170,0,0.3);
+}
+.completed-slot .char {
+  font-size: 36px; color: #ffdd88;
+  opacity: 0; transition: opacity 0.5s;
+}
+.completed-slot.filled .char { opacity: 1; }
+
+/* 演变动画覆盖层 */
+#evolution-overlay {
+  position: absolute; inset: 0;
+  background: rgba(10,6,2,0.85);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column;
+  z-index: 200;
+}
+#evolution-overlay.show { display: flex; }
+#evo-stage {
+  width: 200px; height: 200px;
+  display: flex; align-items: center; justify-content: center;
+}
+#evo-stage svg { width: 150px; height: 150px; }
+#evo-stage .evo-char {
+  font-size: 100px; color: #ffdd88;
+}
+#evo-label {
+  margin-top: 20px; color: #c0a060; font-size: 16px;
+}
+#evo-story {
+  margin-top: 12px; color: #f0e6d0; font-size: 18px;
+  max-width: 400px; text-align: center;
+}
+
+/* 考察阶段 */
+#quiz-stage {
+  position: absolute; inset: 0;
+  display: none;
+  background: #1a1008;
+  overflow: hidden;
+}
+#quiz-stage::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: url('quiz_bg.png') center/cover no-repeat;
+  z-index: 0;
+  transition: opacity 0.8s;
+}
+#quiz-stage::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 60%, rgba(10,6,2,0.18) 100%);
+  z-index: 0;
+  pointer-events: none;
+}
+#quiz-stage.correct::before {
+  background-image: url('quiz_correct_bg.jpg');
+}
+#quiz-stage > * { position: absolute; z-index: 2; }
+
+#sentence-area {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 4px;
+  font-size: 30px; color: #fff5dc;
+  letter-spacing: 2px;
+  flex-wrap: nowrap; justify-content: center; white-space: nowrap;
+  padding: 22px 40px;
+  max-width: 92%;
+  background: linear-gradient(180deg, rgba(30,20,10,0.78) 0%, rgba(20,12,6,0.85) 100%);
+  border: 1px solid rgba(255,200,120,0.35);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.4) inset,
+    0 0 40px rgba(0,0,0,0.55),
+    0 0 60px rgba(255,170,0,0.08);
+  text-shadow: 0 2px 6px rgba(0,0,0,0.85), 0 0 14px rgba(255,170,0,0.25);
+}
+.sentence-text { line-height: 1.8; }
+.blank-slot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 50px; height: 50px;
+  border: 2px dashed #8b6914;
+  border-radius: 8px;
+  margin: 0 4px;
+  vertical-align: middle;
+  transition: border-color 0.3s, background 0.3s;
+}
+.blank-slot.highlight {
+  border-color: #ffaa00;
+  background: rgba(255,170,0,0.15);
+}
+.blank-slot.filled {
+  border: 2px solid #ffaa00;
+  background: rgba(139,105,20,0.3);
+}
+.blank-slot .filled-char {
+  font-size: 32px; color: #ffdd88;
+}
+
+#char-cards {
+  position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 24px;
+  padding: 18px 28px;
+  background: rgba(20,12,6,0.55);
+  border: 1px solid rgba(255,200,120,0.18);
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  transition: opacity 0.5s, transform 0.5s;
+}
+#char-cards.gone {
+  opacity: 0;
+  transform: translate(-50%, 30px);
+  pointer-events: none;
+}
+.char-card {
+  width: 70px; height: 70px;
+  background: linear-gradient(180deg, rgba(80,55,25,0.9) 0%, rgba(50,32,14,0.95) 100%);
+  border: 2px solid #c8961f;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px; color: #ffe9a8;
+  cursor: grab;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255,220,150,0.25),
+    inset 0 -8px 12px rgba(0,0,0,0.35),
+    0 4px 12px rgba(0,0,0,0.5);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.char-card:hover {
+  transform: scale(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255,220,150,0.3),
+    inset 0 -8px 12px rgba(0,0,0,0.35),
+    0 6px 20px rgba(255,170,0,0.45);
+}
+.char-card.dragging {
+  cursor: grabbing; transform: scale(1.12);
+  box-shadow: 0 0 25px rgba(255,170,0,0.5);
+  z-index: 50;
+}
+.char-card.used {
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+  transition: opacity 0.4s, transform 0.4s;
+}
+
+/* 通关画面 */
+#ending {
+  position: absolute; inset: 0;
+  background: rgba(10,6,2,0.9);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; z-index: 300;
+}
+#ending.show { display: flex; }
+#ending h2 { color: #ffaa00; font-size: 28px; margin-bottom: 20px; }
+#ending .final-sentence { color: #f0e6d0; font-size: 24px; margin-bottom: 30px; }
+#ending .badge { color: #ffdd88; font-size: 20px; }
+
+/* 散落龟甲碎片装饰 */
+.shell-fragment {
+  position: absolute;
+  width: 40px; height: 30px;
+  background: rgba(180,150,100,0.3);
+  border-radius: 40% 60% 50% 50%;
+  border: 1px solid rgba(180,150,100,0.2);
+  transform: rotate(var(--rot));
+}
+
+/* 拼字阶段 */
+#assemble-stage {
+  position: absolute; inset: 0;
+  display: none;
+  background: radial-gradient(ellipse at 50% 50%, #2a1a0a 0%, #0d0804 100%);
+  z-index: 10;
+}
+#assemble-stage.show { display: block; }
+
+#center-piece {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 180px; height: 180px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 80px; color: #ffd166;
+  background: url('shard_wood.png') center/contain no-repeat;
+  filter: drop-shadow(0 0 20px rgba(255,170,0,0.35));
+  transition: filter 0.4s, transform 0.4s;
+}
+#center-piece.glow {
+  filter: drop-shadow(0 0 30px rgba(255,170,0,0.8)) drop-shadow(0 0 60px rgba(255,100,0,0.5));
+  transform: translate(-50%, -50%) scale(1.1);
+}
+#center-piece.matched-text {
+  background: rgba(60,40,20,0.6);
+  border: 3px solid #ffaa00;
+  border-radius: 16px;
+  text-shadow: 0 0 20px rgba(255,170,0,0.8);
+}
+
+.drag-piece {
+  position: absolute;
+  width: 140px; height: 140px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: grab;
+  user-select: none;
+  animation: shard-pulse 1.4s ease-in-out infinite;
+  transition: filter 0.3s;
+  z-index: 20;
+  filter: drop-shadow(0 0 8px rgba(255,170,0,0.25));
+}
+.drag-piece[data-piece="人"] { background-image: url('shard_person.png'); top: calc(50% - 70px); left: 20%; }
+.drag-piece[data-piece="爪"] { background-image: url('shard_claw.png'); bottom: 8%; left: calc(50% - 70px); }
+.drag-piece[data-piece="木"] { background-image: url('shard_wood.png'); top: calc(50% - 70px); right: 20%; }
+.drag-piece:hover {
+  filter: drop-shadow(0 0 18px rgba(255,170,0,0.6));
+}
+.drag-piece.dragging {
+  cursor: grabbing;
+  animation: none;
+  filter: drop-shadow(0 0 25px rgba(255,170,0,0.7));
+  z-index: 30;
+}
+.drag-piece.matched {
+  pointer-events: none;
+  animation: piece-vanish 0.6s forwards;
+}
+@keyframes piece-vanish {
+  0%   { opacity: 1; transform: scale(1); }
+  50%  { opacity: 0.8; transform: scale(1.3); }
+  100% { opacity: 0; transform: scale(0.5); }
+}
+
+#assemble-hint {
+  position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+  color: #c0a060; font-size: 18px;
+  background: rgba(60,40,20,0.8);
+  border: 1px solid #8b6914;
+  border-radius: 20px;
+  padding: 10px 24px;
+}
+
+#assembled-chars-top {
+  position: absolute; top: 8%; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 24px;
+}
+.assembled-slot {
+  width: 60px; height: 60px;
+  border: 2px solid rgba(139,105,20,0.3);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(30,20,10,0.5);
+  transition: all 0.5s;
+}
+.assembled-slot.filled {
+  border-color: #ffaa00;
+  background: rgba(139,105,20,0.2);
+  box-shadow: 0 0 10px rgba(255,170,0,0.3);
+}
+.assembled-slot .char {
+  font-size: 32px; color: #ffdd88;
+  opacity: 0; transition: opacity 0.5s;
+}
+.assembled-slot.filled .char { opacity: 1; }
+
+/* 演变视频：画中画"回忆"风格 */
+#evo-dim-overlay {
+  position: absolute; inset: 0;
+  display: none;
+  align-items: center; justify-content: center;
+  background: rgba(10, 6, 2, 0);
+  z-index: 60;
+  transition: background 0.5s;
+}
+#evo-dim-overlay.show {
+  display: flex;
+  background: rgba(10, 6, 2, 0.78);
+}
+
+#evo-video-frame {
+  position: relative;
+  width: 70%; max-width: 820px;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 2px solid rgba(255, 210, 150, 0.7);
+  border-radius: 14px;
+  overflow: hidden;
+}
+#evo-video-frame::before {
+  content: '';
+  position: absolute; inset: -8px;
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  pointer-events: none;
+  z-index: -1;
+}
+#evo-dim-overlay.show #evo-video-frame {
+  /* 视频本体不做 transform/opacity 过渡，避免 Edge 上 GPU 合成层引起色偏 */
+}
+
+/* 四角装饰（老胶片刻度感） */
+#evo-video-frame::after {
+  content: '';
+  position: absolute;
+  top: 10px; left: 10px; right: 10px; bottom: 10px;
+  pointer-events: none;
+  z-index: 3;
+  background:
+    linear-gradient(rgba(255,210,130,0.85), rgba(255,210,130,0.85)) top left / 28px 2px no-repeat,
+    linear-gradient(rgba(255,210,130,0.85), rgba(255,210,130,0.85)) top left / 2px 28px no-repeat,
+    linear-gradient(rgba(255,210,130,0.85), rgba(255,210,130,0.85)) bottom right / 28px 2px no-repeat,
+    linear-gradient(rgba(255,210,130,0.85), rgba(255,210,130,0.85)) bottom right / 2px 28px no-repeat;
+}
+
+/* 视频本体 */
+#evo-video {
+  position: relative;
+  z-index: 2;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: none;
+  -webkit-filter: none;
+  mix-blend-mode: normal;
+}
+
+/* 占位（视频文件缺失时显示底色） */
+.evo-placeholder {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(60,40,20,0.6) 0%, rgba(10,6,2,0.95) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* 视频关闭按钮 */
+#evo-close-btn {
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 210, 150, 0.85);
+  background: rgba(20, 12, 6, 0.7);
+  color: #ffd9a3;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 4;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+#evo-close-btn:hover {
+  background: rgba(60, 40, 20, 0.9);
+  color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 0 14px rgba(255, 170, 0, 0.45);
+}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="bg-video" playsinline>
+    <source src="intro.mp4" type="video/mp4">
+  </video>
+
+  <div class="scene-elements">
+    <div class="cave-bg"></div>
+    <div class="rock-texture"></div>
+    <div class="torch-glow left"></div>
+    <div class="torch-glow right"></div>
+    <div class="torch left-torch"><div class="torch-flame"></div><div class="torch-body"></div></div>
+    <div class="torch right-torch"><div class="torch-flame"></div><div class="torch-body"></div></div>
+  </div>
+
+  <!-- 造境对话 -->
+  <div id="dialog">
+    <div class="speaker">族长：</div>
+    <div id="dialog-text">族人留下了一条信息，但龟甲被打碎了，你能帮我把它们拼起来吗？</div>
+    <button id="start-btn">接受任务</button>
+  </div>
+
+  <!-- 探索阶段 -->
+  <div id="explore-stage">
+    <div id="completed-chars">
+      <div class="completed-slot" data-char="休"><span class="char">休</span></div>
+      <div class="completed-slot" data-char="采"><span class="char">采</span></div>
+      <div class="completed-slot" data-char="林"><span class="char">林</span></div>
+    </div>
+    <div id="shard-counter">龟甲碎片：<span class="count" id="shard-count">0</span> / 4</div>
+    <div id="pano-viewport">
+      <div id="cave-scene">
+        <!-- 4 块碎片，位置由 JS 在 placeShards() 里按可视区动态计算 -->
+        <div class="shard" data-piece="人"></div>
+        <div class="shard" data-piece="爪"></div>
+        <div class="shard" data-piece="木A"></div>
+        <div class="shard" data-piece="木B"></div>
+      </div>
+      <div class="pano-hint left">‹</div>
+      <div class="pano-hint right">›</div>
+      <div id="drag-hint-text">← 拖动屏幕探索 →</div>
+    </div>
+    <div id="toast"></div>
+  </div>
+
+  <!-- 拼字阶段 -->
+  <div id="assemble-stage">
+    <div id="assembled-chars-top">
+      <div class="assembled-slot" data-char="休"><span class="char">休</span></div>
+      <div class="assembled-slot" data-char="采"><span class="char">采</span></div>
+      <div class="assembled-slot" data-char="林"><span class="char">林</span></div>
+    </div>
+    <div id="center-piece"></div>
+    <div class="drag-piece" data-piece="爪" data-result="采"></div>
+    <div class="drag-piece" data-piece="人" data-result="休"></div>
+    <div class="drag-piece" data-piece="木" data-result="林"></div>
+    <div id="assemble-hint">将碎片拖到中间的"木"上拼出汉字</div>
+
+    <!-- 演变动画：画中画回忆框 -->
+    <div id="evo-dim-overlay">
+      <div id="evo-video-frame">
+        <div class="evo-placeholder"></div>
+        <video id="evo-video" playsinline></video>
+        <button id="evo-close-btn" type="button" aria-label="关闭">×</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 演变动画 -->
+  <div id="evolution-overlay">
+    <div id="evo-stage"></div>
+    <div id="evo-label"></div>
+    <div id="evo-story"></div>
+  </div>
+
+  <!-- 考察阶段 -->
+  <div id="quiz-stage">
+    <div id="sentence-area"></div>
+    <div id="char-cards"></div>
+  </div>
+
+  <!-- 通关 -->
+  <div id="ending">
+    <h2>龟甲修复完成！</h2>
+    <div class="final-sentence">"族人在<span style="color:#ffaa00">林</span>中<span style="color:#ffaa00">采</span>了果子，靠着树<span style="color:#ffaa00">休</span>息。"</div>
+    <div class="badge">🏆 你是部落的小记事官了！</div>
+  </div>
+</div>
+
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// 甲骨文SVG路径
+const oraclePaths = {
+  木: 'M50 15 L50 85 M50 40 L25 60 M50 40 L75 60 M40 85 L60 85',
+  人: 'M50 20 L50 55 L30 85 M50 55 L70 85 M35 40 L65 40',
+  爪: 'M30 30 L30 60 M45 25 L45 65 M60 30 L60 60 M25 65 L65 65 L65 75',
+  休: 'M60 20 L60 55 L45 80 M60 55 L75 80 M50 40 L65 40 M35 15 L35 85 M35 40 L20 55 M35 40 L15 60',
+  采: 'M30 20 L30 50 M45 15 L45 55 M60 20 L60 50 M25 55 L65 55 M45 55 L45 90 M45 65 L30 78 M45 65 L60 78',
+  林: 'M30 15 L30 85 M30 40 L15 55 M30 40 L45 55 M70 15 L70 85 M70 40 L55 55 M70 40 L85 55'
+};
+
+// 字形演变数据
+const evolutionData = {
+  休: {
+    story: '人靠着树，就是休息',
+    stages: ['甲骨文', '金文', '小篆', '楷体'],
+    char: '休'
+  },
+  采: {
+    story: '手伸向树梢，摘下果实',
+    stages: ['甲骨文', '金文', '小篆', '楷体'],
+    char: '采'
+  },
+  林: {
+    story: '两棵树并排，就是树林',
+    stages: ['甲骨文', '金文', '小篆', '楷体'],
+    char: '林'
+  }
+};
+
+// 组合规则
+const combineRules = { '人': '休', '爪': '采', '木2': '林' };
+
+// 状态
+let completedChars = [];
+let currentPhase = 'intro';
+
+// 创建SVG元素
+function createSVG(pathData, color = '#c0a060') {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', color);
+  svg.setAttribute('stroke-width', '4');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', pathData);
+  svg.appendChild(path);
+  return svg;
+}
+
+// 初始化
+function init() {
+  const video = document.getElementById('bg-video');
+  const dialog = document.getElementById('dialog');
+
+  // 点击视频开始播放
+  video.addEventListener('click', function playVideo() {
+    video.play();
+    video.classList.add('playing');
+    video.style.cursor = 'default';
+    video.removeEventListener('click', playVideo);
+  });
+
+  // 视频播放完成后显示对话框
+  video.addEventListener('ended', () => {
+    // 视频定格在最后一帧，直接显示对话框
+    setTimeout(() => {
+      dialog.classList.add('show');
+    }, 500);
+  });
+
+  // 开始按钮
+  document.getElementById('start-btn').addEventListener('click', startExplore);
+}
+
+// 进入探索阶段
+function startExplore() {
+  playClick();
+  currentPhase = 'explore';
+  startBgm('explore');
+  const video = document.getElementById('bg-video');
+  const dialog = document.getElementById('dialog');
+
+  // 隐藏对话框
+  dialog.classList.remove('show');
+
+  // 视频淡出
+  video.style.transition = 'opacity 1s';
+  video.style.opacity = '0';
+
+  setTimeout(() => {
+    video.style.display = 'none';
+    document.getElementById('explore-stage').style.display = 'block';
+    initExplore();
+  }, 1000);
+}
+
+// 初始化探索阶段：宽幅全景拖动 + 4 块碎片
+function initExplore() {
+  const viewport = document.getElementById('pano-viewport');
+  const scene    = document.getElementById('cave-scene');
+
+  // 等图片自然加载，按"高度铺满 + 宽至少 2.2 倍视口"算，确保有充足拖动余量
+  const img = new Image();
+  img.onload = () => {
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+    const heightScale = vh / img.height;
+    const minWidthScale = (vw * 2.2) / img.width;
+    const scale = Math.max(heightScale, minWidthScale);
+    const sceneW = img.width * scale;
+    const sceneH = img.height * scale;
+    const topOffset = (vh - sceneH) / 2;       // 场景上下溢出时为负
+    scene.style.width  = sceneW + 'px';
+    scene.style.height = sceneH + 'px';
+    scene.style.top    = topOffset + 'px';
+
+    // 把碎片均匀分布到"可视垂直带"中——不管屏幕比例如何都能看到
+    placeShards(sceneH, vh, topOffset);
+
+    initPanoDrag(viewport, scene, sceneW);
+    demoPan(scene, sceneW, vw);
+  };
+  img.src = 'panorama.png';
+
+  // 绑定碎片点击
+  document.querySelectorAll('.shard').forEach(el => {
+    el.addEventListener('click', e => {
+      // 拖动后的轻微移动不应触发点击：在 drag 模块里通过 dragged 标记拦截
+      if (viewport.dataset.dragged === '1') return;
+      e.stopPropagation();
+      onShardClick(el);
+    });
+  });
+}
+
+// 把 4 块碎片放到"当前可视区"对应的场景百分比里
+function placeShards(sceneH, vh, topOffset) {
+  // 可视区在场景里的纵向范围（0~1）
+  const visTop = (-topOffset) / sceneH;
+  const visBot = visTop + vh / sceneH;
+  // 留点边距：上 10%、下 15%（碎片有 50px 高，不要贴底）
+  const safeTop = visTop + (visBot - visTop) * 0.10;
+  const safeBot = visTop + (visBot - visTop) * 0.85;
+  const safeRange = safeBot - safeTop;
+
+  // 4 块碎片：横向位置 + 在安全带内的相对纵向（0=带顶 1=带底）
+  const layout = [
+    { piece: '人',  leftPct: 18, vRel: 0.30 },
+    { piece: '爪',  leftPct: 40, vRel: 0.85 },
+    { piece: '木A', leftPct: 62, vRel: 0.45 },
+    { piece: '木B', leftPct: 80, vRel: 0.70 }
+  ];
+  layout.forEach(({ piece, leftPct, vRel }) => {
+    const el = document.querySelector(`.shard[data-piece="${piece}"]`);
+    if (!el) return;
+    el.style.left = leftPct + '%';
+    el.style.top  = ((safeTop + vRel * safeRange) * 100) + '%';
+  });
+}
+
+// 入场示范动画：场景缓慢左右晃动一次，提示用户可拖动
+function demoPan(scene, sceneW, vw) {
+  const range = Math.min(120, (sceneW - vw) / 4);  // 最多晃 120px，或可拖范围的 1/4
+  scene.style.transition = 'transform 1.2s ease-in-out';
+  let step = 0;
+  const seq = [-range, 0, range, 0];
+  const tick = () => {
+    if (step >= seq.length) {
+      scene.style.transition = '';      // 演示结束，恢复无过渡（拖动需要即时跟手）
+      return;
+    }
+    scene.style.transform = `translateX(${seq[step++]}px)`;
+    setTimeout(tick, 1200);
+  };
+  setTimeout(tick, 500);  // 进入后稍等再演示
+}
+
+// 全景拖动逻辑：鼠标 + 触屏，限制在边界内
+function initPanoDrag(viewport, scene, sceneW) {
+  let startX = 0, startTx = 0, tx = 0, dragging = false, moved = 0;
+
+  const minTx = Math.min(0, viewport.clientWidth - sceneW); // 场景左边界
+  const maxTx = 0;                                          // 场景右边界
+
+  const apply = () => { scene.style.transform = `translateX(${tx}px)`; };
+
+  const start = (clientX) => {
+    // 同步当前显示位置（demo 动画可能还在过渡中），避免 transition 清空时画面跳跃
+    const m = getComputedStyle(scene).transform.match(/-?\d+(\.\d+)?/g);
+    if (m && m.length >= 6) {
+      const curX = parseFloat(m[4]);
+      tx = Math.max(minTx, Math.min(maxTx, curX));
+    }
+    scene.style.transition = '';
+    scene.style.transform = `translateX(${tx}px)`;
+    dragging = true; moved = 0; startX = clientX; startTx = tx;
+    viewport.classList.add('grabbing');
+    viewport.dataset.dragged = '0';
+    const hint = document.getElementById('drag-hint-text');
+    if (hint) hint.classList.add('hidden');
+  };
+  const move = (clientX) => {
+    if (!dragging) return;
+    const dx = clientX - startX;
+    moved = Math.max(moved, Math.abs(dx));
+    tx = Math.max(minTx, Math.min(maxTx, startTx + dx));
+    apply();
+    if (moved > 5) viewport.dataset.dragged = '1';
+  };
+  const end = () => {
+    dragging = false;
+    viewport.classList.remove('grabbing');
+    // 延迟清除标记，让 click 事件先看到
+    setTimeout(() => viewport.dataset.dragged = '0', 50);
+  };
+
+  viewport.addEventListener('mousedown', e => start(e.clientX));
+  window.addEventListener('mousemove',   e => move(e.clientX));
+  window.addEventListener('mouseup',     end);
+  viewport.addEventListener('touchstart', e => start(e.touches[0].clientX), {passive: true});
+  viewport.addEventListener('touchmove',  e => move(e.touches[0].clientX),  {passive: true});
+  viewport.addEventListener('touchend',   end);
+}
+
+// 收集到的碎片记录（人 / 爪 / 木A / 木B）
+let collectedShards = [];
+let isCollecting = false; // 防止采集动画期间点击其他碎片
+
+// 碎片点击：提示 + 计数；集齐 4 片后串播演变
+function onShardClick(el) {
+  if (el.classList.contains('collected') || isCollecting) return;
+
+  isCollecting = true;
+  const piece = el.dataset.piece;
+  collectedShards.push(piece);
+
+  playCollect();
+
+  // 创建放大展示效果
+  const clone = el.cloneNode(true);
+  clone.style.position = 'fixed';
+  clone.style.left = '50%';
+  clone.style.top = '50%';
+  clone.style.transform = 'translate(-50%, -50%) scale(0.8)';
+  clone.style.zIndex = '100';
+  clone.style.animation = 'none';
+  clone.style.filter = 'drop-shadow(0 0 30px rgba(255,170,0,1))';
+  clone.style.transition = 'transform 0.5s ease-out, opacity 0.3s ease-in';
+  document.body.appendChild(clone);
+
+  // 放大展示
+  setTimeout(() => {
+    clone.style.transform = 'translate(-50%, -50%) scale(2.5)';
+  }, 50);
+
+  // 更新计数
+  document.getElementById('shard-count').textContent = collectedShards.length;
+
+  // 显示提示
+  showToast(`你获得了一个龟甲碎片 (${collectedShards.length}/4)`);
+
+  // 淡出并移除展示
+  setTimeout(() => {
+    clone.style.opacity = '0';
+    setTimeout(() => {
+      clone.remove();
+      el.classList.add('collected');
+      isCollecting = false;
+
+      if (collectedShards.length === 4) {
+        setTimeout(startAssemble, 800);
+      }
+    }, 300);
+  }, 1200);
+}
+
+// 串播三个字的演变动画：休 → 采 → 林
+function playAllEvolutions() {
+  showToast('碎片集齐了！正在拼接龟甲……');
+  const order = ['休', '采', '林'];
+  let i = 0;
+  const playNext = () => {
+    if (i >= order.length) {
+      // 全部播完，进入考察阶段
+      setTimeout(startQuiz, 600);
+      return;
+    }
+    const ch = order[i++];
+    completedChars.push(ch);
+    playEvolution(ch);
+    // 等单次演变结束（约 4×1.2s + 2s 收尾 ≈ 7s），再播下一个
+  };
+  // 改造 finishEvolution：原本每次结束就检查是否完成；这里按队列推进
+  window.__evoQueueNext = playNext;
+  playNext();
+}
+
+// ========== 拼字阶段 ==========
+let assembledCount = 0;
+
+function startAssemble() {
+  currentPhase = 'assemble';
+  startBgm('assemble');
+  document.getElementById('explore-stage').style.display = 'none';
+  document.getElementById('assemble-stage').classList.add('show');
+  showToast('碎片集齐了！试着把它们拼成汉字吧');
+  initAssembleDrag();
+}
+
+function initAssembleDrag() {
+  const stage = document.getElementById('assemble-stage');
+  const pieces = stage.querySelectorAll('.drag-piece');
+  let dragEl = null, offsetX = 0, offsetY = 0;
+
+  function onStart(e) {
+    const piece = e.target.closest('.drag-piece');
+    if (!piece || piece.classList.contains('matched')) return;
+    dragEl = piece;
+    const rect = piece.getBoundingClientRect();
+    const clientX = e.clientX ?? e.touches[0].clientX;
+    const clientY = e.clientY ?? e.touches[0].clientY;
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
+    dragEl.classList.add('dragging');
+    dragEl.style.position = 'fixed';
+    dragEl.style.transform = 'none';
+    dragEl.style.left = rect.left + 'px';
+    dragEl.style.top = rect.top + 'px';
+    dragEl.style.right = 'auto';
+    dragEl.style.zIndex = 30;
+  }
+
+  function onMove(e) {
+    if (!dragEl) return;
+    e.preventDefault();
+    const clientX = e.clientX ?? e.touches[0].clientX;
+    const clientY = e.clientY ?? e.touches[0].clientY;
+    dragEl.style.left = (clientX - offsetX) + 'px';
+    dragEl.style.top = (clientY - offsetY) + 'px';
+
+    const center = document.getElementById('center-piece');
+    const cr = center.getBoundingClientRect();
+    const dist = Math.hypot(clientX - (cr.left + cr.width/2), clientY - (cr.top + cr.height/2));
+    center.classList.toggle('glow', dist < 80);
+  }
+
+  function onEnd(e) {
+    if (!dragEl) return;
+    const clientX = e.clientX ?? e.changedTouches[0].clientX;
+    const clientY = e.clientY ?? e.changedTouches[0].clientY;
+
+    const center = document.getElementById('center-piece');
+    const cr = center.getBoundingClientRect();
+    const dist = Math.hypot(clientX - (cr.left + cr.width/2), clientY - (cr.top + cr.height/2));
+    center.classList.remove('glow');
+
+    if (dist < 80) {
+      const resultChar = dragEl.dataset.result;
+      dragEl.classList.add('matched');
+      onPieceMatched(resultChar);
+    } else {
+      dragEl.style.position = '';
+      dragEl.style.left = '';
+      dragEl.style.top = '';
+      dragEl.style.right = '';
+      dragEl.style.transform = '';
+      dragEl.style.zIndex = '';
+    }
+    dragEl.classList.remove('dragging');
+    dragEl = null;
+  }
+
+  stage.addEventListener('mousedown', onStart);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onEnd);
+  stage.addEventListener('touchstart', onStart, {passive: false});
+  stage.addEventListener('touchmove', onMove, {passive: false});
+  stage.addEventListener('touchend', onEnd);
+}
+
+function onPieceMatched(char) {
+  assembledCount++;
+  const center = document.getElementById('center-piece');
+  center.textContent = char;
+  center.classList.add('glow', 'matched-text');
+  center.style.fontSize = '80px';
+
+  const slot = document.querySelector(`#assembled-chars-top .assembled-slot[data-char="${char}"]`);
+  if (slot) slot.classList.add('filled');
+
+  completedChars.push(char);
+
+  setTimeout(() => {
+    center.classList.remove('glow');
+    playEvoVideo(char, () => {
+      center.textContent = '';
+      center.classList.remove('matched-text');
+      checkAssembleComplete();
+    });
+  }, 800);
+}
+
+const evoVideoFiles = {
+  '休': 'evo_rest.mp4',
+  '采': 'evo_pick.mp4',
+  '林': 'evo_forest.mp4'
+};
+
+function playEvoVideo(char, callback) {
+  const overlay = document.getElementById('evo-dim-overlay');
+  const video = document.getElementById('evo-video');
+  const closeBtn = document.getElementById('evo-close-btn');
+
+  overlay.classList.add('show');
+  stopBgmForVideo();
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    overlay.classList.remove('show');
+    closeBtn.onclick = null;
+    resumeBgmAfterVideo();
+    setTimeout(() => {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      if (callback) callback();
+    }, 600);
+  };
+
+  video.onended = finish;
+  video.onerror = () => setTimeout(finish, 2500);
+  closeBtn.onclick = finish;
+
+  video.src = evoVideoFiles[char];
+  const playPromise = video.play();
+  if (playPromise && playPromise.catch) {
+    playPromise.catch(() => setTimeout(finish, 2500));
+  }
+}
+
+function checkAssembleComplete() {
+  if (assembledCount >= 3) {
+    setTimeout(() => {
+      document.getElementById('assemble-stage').classList.remove('show');
+      startQuiz();
+    }, 800);
+  }
+}
+
+// 浮动提示
+function showToast(text) {
+  const toast = document.getElementById('toast');
+  toast.textContent = text;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+// 拖拽系统（仅用于考察阶段）
+function initQuizDrag() {
+  let dragEl = null;
+  let offsetX = 0, offsetY = 0;
+
+  function onStart(e) {
+    if (currentPhase !== 'quiz') return;
+    const card = e.target.closest('.char-card');
+    if (!card || card.classList.contains('used')) return;
+    dragEl = card;
+    const rect = card.getBoundingClientRect();
+    const clientX = e.clientX || e.touches[0].clientX;
+    const clientY = e.clientY || e.touches[0].clientY;
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
+    // 记录原始父节点，拖拽时挂到 body 下，避免父级 transform 影响 fixed 定位
+    dragEl._origParent = card.parentNode;
+    dragEl._origNext = card.nextSibling;
+    document.body.appendChild(dragEl);
+    card.classList.add('dragging');
+    card.style.position = 'fixed';
+    card.style.left = rect.left + 'px';
+    card.style.top = rect.top + 'px';
+    card.style.margin = '0';
+    card.style.zIndex = 50;
+  }
+
+  function onMove(e) {
+    if (!dragEl) return;
+    e.preventDefault();
+    const clientX = e.clientX || e.touches[0].clientX;
+    const clientY = e.clientY || e.touches[0].clientY;
+
+    dragEl.style.left = (clientX - offsetX) + 'px';
+    dragEl.style.top = (clientY - offsetY) + 'px';
+    // 高亮最近的空格
+    document.querySelectorAll('.blank-slot:not(.filled)').forEach(slot => {
+      const r = slot.getBoundingClientRect();
+      const d = Math.hypot(clientX - (r.left+r.width/2), clientY - (r.top+r.height/2));
+      slot.classList.toggle('highlight', d < 60);
+    });
+  }
+
+  function onEnd(e) {
+    if (!dragEl) return;
+    const clientX = e.clientX || e.changedTouches[0].clientX;
+    const clientY = e.clientY || e.changedTouches[0].clientY;
+
+    dragEl.classList.remove('dragging');
+    document.querySelectorAll('.blank-slot').forEach(s => s.classList.remove('highlight'));
+    let placed = false;
+    document.querySelectorAll('.blank-slot:not(.filled)').forEach(slot => {
+      const r = slot.getBoundingClientRect();
+      const d = Math.hypot(clientX - (r.left+r.width/2), clientY - (r.top+r.height/2));
+      if (d < 60 && !placed) {
+        const expected = slot.dataset.answer;
+        const dragged = dragEl.dataset.char;
+        if (dragged === expected) {
+          slot.classList.add('filled');
+          slot.innerHTML = `<span class="filled-char">${dragged}</span>`;
+          dragEl.classList.add('used');
+          placed = true;
+          playDing();
+          checkQuizComplete();
+        } else {
+          playWrong();
+          showDialog('再想想这个字的样子——它是怎么拼出来的？');
+        }
+      }
+    });
+    // 归位：插回原父节点，清空 inline 样式
+    if (dragEl._origParent) {
+      dragEl._origParent.insertBefore(dragEl, dragEl._origNext || null);
+      dragEl._origParent = null;
+      dragEl._origNext = null;
+    }
+    dragEl.style.position = '';
+    dragEl.style.left = '';
+    dragEl.style.top = '';
+    dragEl.style.margin = '';
+    dragEl.style.zIndex = '';
+    dragEl = null;
+  }
+
+  document.addEventListener('mousedown', onStart);
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onEnd);
+  document.addEventListener('touchstart', onStart, {passive: false});
+  document.addEventListener('touchmove', onMove, {passive: false});
+  document.addEventListener('touchend', onEnd);
+}
+
+// 播放演变动画
+function playEvolution(char) {
+  const overlay = document.getElementById('evolution-overlay');
+  const stage = document.getElementById('evo-stage');
+  const label = document.getElementById('evo-label');
+  const story = document.getElementById('evo-story');
+  const data = evolutionData[char];
+
+  overlay.classList.add('show');
+  let step = 0;
+  const stages = data.stages;
+
+  function showStep() {
+    if (step < 3) {
+      // 甲骨文、金文、小篆用SVG（简化处理：都用同一路径但颜色/大小变化）
+      stage.innerHTML = '';
+      const colors = ['#c0a060', '#d4a84b', '#8b7355'];
+      const sizes = [150, 130, 110];
+      const svg = createSVG(oraclePaths[char], colors[step]);
+      svg.style.width = sizes[step] + 'px';
+      svg.style.height = sizes[step] + 'px';
+      svg.style.transition = 'all 0.5s';
+      stage.appendChild(svg);
+      label.textContent = stages[step];
+    } else {
+      // 楷体
+      stage.innerHTML = `<span class="evo-char">${char}</span>`;
+      label.textContent = stages[step];
+      story.textContent = data.story;
+    }
+    step++;
+    if (step <= 3) {
+      setTimeout(showStep, 1200);
+    } else {
+      setTimeout(finishEvolution.bind(null, char), 2000);
+    }
+  }
+  story.textContent = '';
+  showStep();
+}
+
+function finishEvolution(char) {
+  const overlay = document.getElementById('evolution-overlay');
+  overlay.classList.remove('show');
+  document.getElementById('evo-stage').innerHTML = '';
+  document.getElementById('evo-label').textContent = '';
+  document.getElementById('evo-story').textContent = '';
+
+  // 标记完成
+  const slot = document.querySelector(`.completed-slot[data-char="${char}"]`);
+  if (slot) slot.classList.add('filled');
+
+  // 队列模式：由 playAllEvolutions 推进；否则按旧逻辑判断
+  if (typeof window.__evoQueueNext === 'function') {
+    setTimeout(window.__evoQueueNext, 800);
+  } else if (completedChars.length === 3) {
+    setTimeout(startQuiz, 1000);
+  }
+}
+
+// 进入考察阶段
+function startQuiz() {
+  currentPhase = 'quiz';
+  startBgm('quiz');
+  document.getElementById('explore-stage').style.display = 'none';
+  document.getElementById('quiz-stage').style.display = 'block';
+  document.getElementById('dialog').classList.add('top');
+  showDialog('龟甲拼好了，现在把这条信息读出来吧。');
+
+  // 构建句子
+  const sentenceArea = document.getElementById('sentence-area');
+  sentenceArea.innerHTML = `
+    <span class="sentence-text">族人在</span>
+    <span class="blank-slot" data-answer="林"></span>
+    <span class="sentence-text">中</span>
+    <span class="blank-slot" data-answer="采"></span>
+    <span class="sentence-text">了果子，靠着树</span>
+    <span class="blank-slot" data-answer="休"></span>
+    <span class="sentence-text">息。</span>
+  `;
+
+  // 构建字卡（打乱顺序）
+  const chars = ['采', '休', '林'].sort(() => Math.random() - 0.5);
+  const cardsArea = document.getElementById('char-cards');
+  cardsArea.innerHTML = '';
+  chars.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'char-card';
+    card.dataset.char = c;
+    card.textContent = c;
+    cardsArea.appendChild(card);
+  });
+
+  // 初始化考察阶段拖拽
+  initQuizDrag();
+}
+
+function checkQuizComplete() {
+  const blanks = document.querySelectorAll('.blank-slot');
+  const allFilled = Array.from(blanks).every(b => b.classList.contains('filled'));
+  if (allFilled) {
+    document.getElementById('char-cards').classList.add('gone');
+    document.getElementById('quiz-stage').classList.add('correct');
+    playSuccess();
+    setTimeout(() => {
+      document.getElementById('quiz-stage').style.display = 'none';
+      document.getElementById('quiz-stage').classList.remove('correct');
+      document.getElementById('ending').classList.add('show');
+    }, 2200);
+  }
+}
+
+function showDialog(text) {
+  const dialog = document.getElementById('dialog');
+  const btn = document.getElementById('start-btn');
+  document.getElementById('dialog-text').textContent = text;
+  btn.style.display = 'none';
+  dialog.classList.add('show');
+  setTimeout(() => dialog.classList.remove('show'), 3000);
+}
+
+// 启动
+window.addEventListener('DOMContentLoaded', init);
+
+// ========== 音效 ==========
+let audioCtx = null;
+let audioUnlocked = false;
+function getAudioCtx() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(()=>{});
+  }
+  return audioCtx;
+}
+function unlockAudio() {
+  if (audioUnlocked) return;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  audioUnlocked = true;
+  if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+  // 硬解锁：播一段空 buffer，部分浏览器需要这一步才会真正出声
+  try {
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch(e) {}
+  console.log('[audio] unlocked, state =', ctx.state);
+}
+document.addEventListener('pointerdown', unlockAudio, { capture: true });
+document.addEventListener('touchstart',  unlockAudio, { capture: true });
+document.addEventListener('keydown',     unlockAudio, { capture: true });
+// 单音"叮"——每填对一个空
+function playDing() {
+  const ctx = getAudioCtx(); if (!ctx) return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(880, t);
+  osc.frequency.exponentialRampToValueAtTime(1320, t + 0.15);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t); osc.stop(t + 0.5);
+}
+// 多音"成功"和弦——全部答对时
+function playSuccess() {
+  const ctx = getAudioCtx(); if (!ctx) return;
+  const t = ctx.currentTime;
+  [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, t + i * 0.12);
+    gain.gain.setValueAtTime(0.0001, t + i * 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.45, t + i * 0.12 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.9);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t + i * 0.12); osc.stop(t + i * 0.12 + 1);
+  });
+}
+
+// 按钮点击——闷一点的木质感
+function playClick() {
+  const ctx = getAudioCtx(); if (!ctx) return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(420, t);
+  osc.frequency.exponentialRampToValueAtTime(220, t + 0.1);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.35, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t); osc.stop(t + 0.2);
+}
+
+// 收集碎片——清脆一点的两段上扬
+function playCollect() {
+  const ctx = getAudioCtx(); if (!ctx) return;
+  const t = ctx.currentTime;
+  [659.25, 987.77].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t + i * 0.08);
+    gain.gain.setValueAtTime(0.0001, t + i * 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.45, t + i * 0.08 + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.08 + 0.4);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t + i * 0.08); osc.stop(t + i * 0.08 + 0.45);
+  });
+}
+
+// 答错——闷沉的下行提示音
+function playWrong() {
+  const ctx = getAudioCtx(); if (!ctx) return;
+  const t = ctx.currentTime;
+  [330, 247].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(freq, t + i * 0.12);
+    gain.gain.setValueAtTime(0.0001, t + i * 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.18, t + i * 0.12 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.32);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t + i * 0.12); osc.stop(t + i * 0.12 + 0.35);
+  });
+}
+
+// ========== 背景音乐 ==========
+let bgmNodes = null;
+
+// 各阶段音乐参数：[音符频率列表, 节拍间隔ms, 振荡器类型, 音量]
+const bgmConfig = {
+  explore: { notes: [220, 261.6, 196, 233.1, 220, 174.6], interval: 1200, type: 'sine', vol: 0.25 },
+  assemble: { notes: [196, 220, 246.9, 220, 196, 174.6], interval: 600, type: 'triangle', vol: 0.25 },
+  quiz:     { notes: [261.6, 293.7, 329.6, 349.2, 329.6, 293.7], interval: 400, type: 'triangle', vol: 0.25 }
+};
+
+function stopBgm() {
+  if (!bgmNodes) return;
+  try {
+    bgmNodes.gain.gain.setValueAtTime(bgmNodes.gain.gain.value, bgmNodes.ctx.currentTime);
+    bgmNodes.gain.gain.linearRampToValueAtTime(0, bgmNodes.ctx.currentTime + 0.8);
+    setTimeout(() => { try { bgmNodes.gain.disconnect(); } catch(e){} }, 900);
+  } catch(e) {}
+  clearInterval(bgmNodes.timer);
+  bgmNodes = null;
+}
+
+function startBgm(phase) {
+  stopBgm();
+  const ctx = getAudioCtx(); if (!ctx) return;
+  const cfg = bgmConfig[phase]; if (!cfg) return;
+
+  const masterGain = ctx.createGain();
+  masterGain.gain.setValueAtTime(0, ctx.currentTime);
+  masterGain.gain.linearRampToValueAtTime(cfg.vol, ctx.currentTime + 1.5);
+  masterGain.connect(ctx.destination);
+
+  // 低频持续嗡鸣（探索阶段专用氛围层）
+  let droneOsc = null;
+  if (phase === 'explore') {
+    droneOsc = ctx.createOscillator();
+    const droneGain = ctx.createGain();
+    droneOsc.type = 'sine';
+    droneOsc.frequency.value = 55;
+    droneGain.gain.value = 0.04;
+    droneOsc.connect(droneGain).connect(masterGain);
+    droneOsc.start();
+  }
+
+  let idx = 0;
+  const tick = () => {
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = cfg.type;
+    osc.frequency.value = cfg.notes[idx % cfg.notes.length];
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(1, t + 0.05);
+    g.gain.linearRampToValueAtTime(0.0001, t + cfg.interval / 1000 * 0.85);
+    osc.connect(g).connect(masterGain);
+    osc.start(t); osc.stop(t + cfg.interval / 1000);
+    idx++;
+  };
+  tick();
+  const timer = setInterval(tick, cfg.interval);
+
+  bgmNodes = { gain: masterGain, timer, ctx, droneOsc };
+}
+
+function stopBgmForVideo() {
+  if (!bgmNodes) return;
+  bgmNodes.gain.gain.linearRampToValueAtTime(0, bgmNodes.ctx.currentTime + 0.4);
+}
+function resumeBgmAfterVideo() {
+  if (!bgmNodes) return;
+  const cfg = bgmConfig[currentPhase];
+  if (!cfg) return;
+  bgmNodes.gain.gain.linearRampToValueAtTime(cfg.vol, bgmNodes.ctx.currentTime + 0.6);
+}
+</script>
+</body>
+</html>
