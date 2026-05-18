@@ -2,11 +2,11 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>甲骨文探索 - 失踪的部落记事</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'SimSun', serif; }
+html, body { width: 100%; height: 100%; height: 100dvh; overflow: hidden; font-family: 'SimSun', serif; }
 
 #app {
   width: 100%; height: 100%;
@@ -613,11 +613,180 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'SimSun',
   box-shadow: 0 0 14px rgba(255, 170, 0, 0.45);
 }
 
+/* ========== 移动端（窄屏） ========== */
+@media (max-width: 768px) {
+  /* 对话框 */
+  #dialog {
+    bottom: 6%;
+    padding: 12px 18px;
+    font-size: 15px;
+    max-width: 88%;
+    line-height: 1.5;
+    border-radius: 10px;
+  }
+  #dialog .speaker { font-size: 14px; }
+  #start-btn {
+    margin-top: 10px;
+    padding: 8px 22px;
+    font-size: 15px;
+  }
+
+  /* 探索阶段顶部进度条 */
+  #shard-counter {
+    top: 3%; right: 3%;
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+  #shard-counter .count { font-size: 18px; }
+
+  /* 已完成字槽 */
+  #completed-chars { top: 3%; gap: 14px; }
+  .completed-slot { width: 46px; height: 46px; }
+  .completed-slot .char { font-size: 24px; }
+
+  /* 火把光影缩小，避免遮挡内容 */
+  .torch-glow { width: 180px; height: 180px; }
+
+  /* 拖动提示 */
+  #drag-hint-text {
+    font-size: 16px;
+    padding: 10px 22px;
+    border-radius: 22px;
+    max-width: 88%;
+    text-align: center;
+  }
+  .pano-hint { font-size: 38px; }
+  .pano-hint.left  { left: 8px; }
+  .pano-hint.right { right: 8px; }
+
+  /* Toast */
+  #toast {
+    font-size: 14px;
+    padding: 9px 16px;
+    max-width: 90%;
+    text-align: center;
+  }
+
+  /* 碎片图标（探索时） */
+  .shard { width: 50px; height: 50px; }
+
+  /* —— 拼字阶段 —— */
+  #assembled-chars-top { top: 5%; gap: 14px; }
+  .assembled-slot { width: 46px; height: 46px; }
+  .assembled-slot .char { font-size: 22px; }
+
+  #assemble-hint {
+    top: 16%;
+    font-size: 14px;
+    padding: 8px 16px;
+    max-width: 86%;
+    text-align: center;
+    border-radius: 16px;
+  }
+
+  #center-piece {
+    width: 130px; height: 130px;
+    font-size: 56px;
+  }
+  #center-piece.matched-text {
+    border-width: 2px;
+    border-radius: 12px;
+  }
+
+  .drag-piece { width: 92px; height: 92px; }
+  .drag-piece[data-piece="人"] { top: calc(50% - 50px); left: 6%; }
+  .drag-piece[data-piece="爪"] { bottom: 12%; left: calc(50% - 46px); }
+  .drag-piece[data-piece="木"] { top: calc(50% - 50px); right: 6%; }
+
+  /* 演变视频框：由 70% 16:9 改成 92% 4:3 */
+  #evo-video-frame {
+    width: 92%;
+    max-width: 100%;
+    aspect-ratio: 4 / 3;
+    border-width: 1.5px;
+    border-radius: 10px;
+  }
+  #evo-close-btn {
+    width: 32px; height: 32px;
+    font-size: 20px;
+    top: 8px; right: 8px;
+  }
+
+  /* —— 考察阶段 —— */
+  #sentence-area {
+    font-size: 18px;
+    letter-spacing: 1px;
+    flex-wrap: wrap;
+    white-space: normal;
+    padding: 14px 18px;
+    max-width: 92%;
+    line-height: 1.7;
+    border-radius: 10px;
+    gap: 2px;
+  }
+  .sentence-text { line-height: 1.7; }
+  .blank-slot {
+    width: 36px; height: 36px;
+    margin: 0 2px;
+    border-radius: 6px;
+  }
+  .blank-slot .filled-char { font-size: 22px; }
+
+  #char-cards {
+    bottom: 8%;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    max-width: 92%;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .char-card {
+    width: 52px; height: 52px;
+    font-size: 26px;
+    border-radius: 8px;
+    border-width: 1.5px;
+  }
+
+  /* 通关画面 */
+  #ending h2 { font-size: 22px; margin-bottom: 14px; padding: 0 12px; text-align: center; }
+  #ending .final-sentence {
+    font-size: 17px; margin-bottom: 20px;
+    padding: 0 14px; text-align: center; line-height: 1.7;
+  }
+  #ending .badge { font-size: 16px; padding: 0 14px; text-align: center; }
+
+  /* 演变 SVG 阶段（playEvolution 用的覆盖层） */
+  #evo-stage { width: 150px; height: 150px; }
+  #evo-stage svg { width: 110px; height: 110px; }
+  #evo-stage .evo-char { font-size: 70px; }
+  #evo-label { font-size: 14px; margin-top: 14px; }
+  #evo-story {
+    font-size: 15px; margin-top: 10px;
+    max-width: 86%; padding: 0 12px;
+  }
+}
+
+/* 横屏短高度：避免拖动碎片溢出屏幕 */
+@media (max-height: 480px) and (orientation: landscape) {
+  #dialog { bottom: 4%; padding: 10px 18px; font-size: 14px; }
+  #completed-chars, #assembled-chars-top { top: 4%; gap: 12px; }
+  .completed-slot, .assembled-slot { width: 40px; height: 40px; }
+  .completed-slot .char, .assembled-slot .char { font-size: 22px; }
+  #center-piece { width: 110px; height: 110px; font-size: 50px; }
+  .drag-piece { width: 80px; height: 80px; }
+  .drag-piece[data-piece="人"] { top: calc(50% - 40px); }
+  .drag-piece[data-piece="爪"] { bottom: 6%; left: calc(50% - 40px); }
+  .drag-piece[data-piece="木"] { top: calc(50% - 40px); }
+  #assemble-hint { top: 18%; font-size: 13px; padding: 6px 14px; }
+  #evo-video-frame { width: 70%; aspect-ratio: 16 / 9; }
+}
+
 </style>
 </head>
 <body>
 <div id="app">
-  <video id="bg-video" playsinline>
+  <video id="bg-video" playsinline webkit-playsinline>
     <source src="intro.mp4" type="video/mp4">
   </video>
 
@@ -677,7 +846,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'SimSun',
     <div id="evo-dim-overlay">
       <div id="evo-video-frame">
         <div class="evo-placeholder"></div>
-        <video id="evo-video" playsinline></video>
+        <video id="evo-video" playsinline webkit-playsinline></video>
         <button id="evo-close-btn" type="button" aria-label="关闭">×</button>
       </div>
     </div>
@@ -929,7 +1098,10 @@ function initPanoDrag(viewport, scene, sceneW) {
   window.addEventListener('mousemove',   e => move(e.clientX));
   window.addEventListener('mouseup',     end);
   viewport.addEventListener('touchstart', e => start(e.touches[0].clientX), {passive: true});
-  viewport.addEventListener('touchmove',  e => move(e.touches[0].clientX),  {passive: true});
+  viewport.addEventListener('touchmove',  e => {
+    if (dragging) e.preventDefault();
+    move(e.touches[0].clientX);
+  }, {passive: false});
   viewport.addEventListener('touchend',   end);
 }
 
