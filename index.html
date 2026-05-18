@@ -1288,6 +1288,22 @@ function initAssembleDrag() {
 
     if (dist < 80) {
       const resultChar = dragEl.dataset.result;
+      // 旋转模式下成功匹配也要把元素插回原父并清 inline 样式，
+      // 否则会留在 body 顶层遮挡后续 UI（如演变视频框）。电脑端保持原样。
+      if (dragEl._rotated) {
+        if (dragEl._origParent) {
+          dragEl._origParent.insertBefore(dragEl, dragEl._origNext || null);
+          dragEl._origParent = null;
+          dragEl._origNext = null;
+        }
+        dragEl._rotated = false;
+        dragEl.style.position = '';
+        dragEl.style.left = '';
+        dragEl.style.top = '';
+        dragEl.style.right = '';
+        dragEl.style.transform = '';
+        dragEl.style.zIndex = '';
+      }
       dragEl.classList.add('matched');
       onPieceMatched(resultChar);
     } else {
@@ -1313,8 +1329,9 @@ function initAssembleDrag() {
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onEnd);
   stage.addEventListener('touchstart', onStart, {passive: false});
-  stage.addEventListener('touchmove', onMove, {passive: false});
-  stage.addEventListener('touchend', onEnd);
+  // 监听挂 window：旋转模式下 dragEl 会被搬到 body 下，stage 收不到后续事件
+  window.addEventListener('touchmove', onMove, {passive: false});
+  window.addEventListener('touchend', onEnd);
 }
 
 function onPieceMatched(char) {
