@@ -1131,6 +1131,10 @@ function onShardClick(el) {
   clone.style.transition = 'transform 0.5s ease-out, opacity 0.3s ease-in';
   document.body.appendChild(clone);
 
+  // 原始碎片立刻消失，避免与放大版同时存在
+  el.style.visibility = 'hidden';
+  el.style.pointerEvents = 'none';
+
   // 放大展示
   setTimeout(() => {
     clone.style.transform = 'translate(-50%, -50%) scale(2.5)';
